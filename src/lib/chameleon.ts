@@ -953,10 +953,11 @@ export class Chameleon {
       let res = await fetch('https://ipinfo.io/json?token=6e280ad97603e8');
       let raw = await res.json();
 
+      const countryCode: string = raw.country || '';
       let data: any = {
         ip: raw.ip || '',
         timezone: raw.timezone || '',
-        languages: this.getLanguageByCountry(raw.country || ''),
+        languages: countryCode || 'x',
       };
       this.tempStore.ipInfo.cache = data;
 
@@ -1048,6 +1049,7 @@ export class Chameleon {
           }
         }
 
+        if (countryCode) this.tempStore.ipInfo.lang = this.getLanguageByCountry(countryCode);
         browser.runtime.sendMessage(
           {
             action: 'tempStore',
