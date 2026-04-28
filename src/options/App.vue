@@ -6,6 +6,7 @@
         <div @click="changeTab('about')" class="options-tab" :class="activeTab('about')" v-t="'options-tab-about.message'"></div>
         <div @click="changeTab('whitelist')" class="options-tab" :class="activeTab('whitelist')" v-t="'text-whitelist.message'"></div>
         <div @click="changeTab('iprules')" class="options-tab" :class="activeTab('iprules')" v-t="'options-tab-ipRules.message'"></div>
+        <div @click="changeTab('ipservices')" class="options-tab" :class="activeTab('ipservices')">IP Services</div>
       </div>
     </div>
     <div class="flex-grow px-4 pt-12 z-0">
@@ -156,6 +157,46 @@
             </tbody>
           </table>
         </div>
+      </div>
+      <div v-show="currentTab === 'ipservices'" class="text-2xl flex flex-col">
+        <p class="mb-4 text-sm">
+          URL: используй <code>{KEY}</code> как плейсхолдер для API ключа.<br />
+          Поля ответа: dot-notation путь к значению в JSON (например <code>time_zone.name</code>).
+        </p>
+        <div v-for="(svc, index) in ipServices" :key="index" class="border rounded p-3 mb-3">
+          <div class="flex items-center gap-x-2 mb-2">
+            <input type="checkbox" v-model="svc.enabled" @change="saveIPServices()" />
+            <select v-model="svc.template" @change="saveIPServices()" class="form-input">
+              <option value="ipinfo">ipinfo.io</option>
+              <option value="ipdata">ipdata.co</option>
+              <option value="abstractapi">abstractapi.com</option>
+              <option value="custom">Custom</option>
+            </select>
+            <div class="ml-auto flex gap-x-1">
+              <button @click="moveIPService(index, -1)" :disabled="index === 0" class="px-1">
+                <feather type="arrow-up" size="1em"></feather>
+              </button>
+              <button @click="moveIPService(index, 1)" :disabled="index === ipServices.length - 1" class="px-1">
+                <feather type="arrow-down" size="1em"></feather>
+              </button>
+              <button @click="removeIPService(index)" class="px-1">
+                <feather type="trash-2" size="1em"></feather>
+              </button>
+            </div>
+          </div>
+          <input v-model="svc.url" @input="saveIPServices()" placeholder="Full URL with API key" class="form-input w-full mb-1" />
+          <div v-if="svc.template === 'custom'" class="flex gap-x-2 mt-1">
+            <input v-model="svc.ipField" @input="saveIPServices()" placeholder="IP field (e.g. ip)" class="form-input flex-1" />
+            <input v-model="svc.countryField" @input="saveIPServices()" placeholder="Country field (e.g. country)" class="form-input flex-1" />
+            <input v-model="svc.tzField" @input="saveIPServices()" placeholder="Timezone field (e.g. timezone)" class="form-input flex-1" />
+          </div>
+        </div>
+        <button @click="addIPService()" class="transparent-btn">
+          <div class="flex items-center">
+            <feather class="mr-2" type="plus" size="1em"></feather>
+            <span>Add service</span>
+          </div>
+        </button>
       </div>
       <div v-show="currentTab === 'iprules'" class="text-2xl flex flex-col">
         <div class="flex flex-col md:flex-row">
@@ -541,6 +582,10 @@ export default class App extends Vue {
     return this['$store'].state;
   }
 
+  get ipServices(): any[] {
+    return (this.settings as any).ipServices || [];
+  }
+
   activeTab(tab: string): string[] {
     return this.currentTab === tab ? ['active'] : ['hover:bg-primary-soft'];
   }
@@ -595,6 +640,8 @@ export default class App extends Vue {
           }
         }
       }
+    } else if (hash[0] === '#ipservices') {
+      this.currentTab = 'ipservices';
     }
   }
 
@@ -773,6 +820,8 @@ export default class App extends Vue {
         this.currentTab = 'iprules';
       } else if (window.location.hash === '#whitelist') {
         this.currentTab = 'whitelist';
+      } else if (window.location.hash === '#ipservices') {
+        this.currentTab = 'ipservices';
       } else {
         this.currentTab = 'about';
       }
@@ -836,6 +885,34 @@ export default class App extends Vue {
     browser.runtime.sendMessage({
       action: 'reloadIPInfo',
       data: true,
+    });
+  }
+
+  addIPService(): void {
+    if (!(this.settings as any).ipServices) (this.settings as any).ipServices = [];
+    (this.settings as any).ipServices.push({ url: '', template: 'ipinfo', enabled: false });
+    this.saveIPServices();
+  }
+
+  removeIPService(index: number): void {
+    (this.settings as any).ipServices.splice(index, 1);
+    this.saveIPServices();
+  }
+
+  moveIPService(index: number, direction: number): void {
+    const arr = (this.settings as any).ipServices;
+    const target = index + direction;
+    if (target < 0 || target >= arr.length) return;
+    const tmp = arr[index];
+    arr.splice(index, 1);
+    arr.splice(target, 0, tmp);
+    this.saveIPServices();
+  }
+
+  saveIPServices(): void {
+    browser.runtime.sendMessage({
+      action: 'save',
+      data: { ipServices: (this.settings as any).ipServices },
     });
   }
 

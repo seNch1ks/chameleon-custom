@@ -7,6 +7,13 @@ import webext from './webext';
 import { Interceptor } from './intercept';
 import { v4 as uuidv4 } from 'uuid';
 
+const IP_TEMPLATES: Record<string, { ip: string; country: string; tz: string }> = {
+  ipinfo: { ip: 'ip', country: 'country', tz: 'timezone' },
+  ipdata: { ip: 'ip', country: 'country_code', tz: 'time_zone.name' },
+  abstractapi: { ip: 'ip_address', country: 'country_code', tz: 'timezone.name' },
+  custom: { ip: '', country: '', tz: '' },
+};
+
 enum IntervalOption {
   None = 0,
   Custom = -1,
@@ -834,6 +841,10 @@ export class Chameleon {
     });
   }
 
+  private getField(obj: any, path: string): string {
+    return String(path.split('.').reduce((o: any, k: string) => (o && o[k] !== undefined ? o[k] : ''), obj) || '');
+  }
+
   private getLanguageByCountry(cc: string): string {
     const map: Record<string, string> = {
       AD: 'ca',
@@ -950,13 +961,37 @@ export class Chameleon {
     try {
       let notificationMsg: string;
 
-      let res = await fetch('https://ipinfo.io/json?token=6e280ad97603e8');
-      let raw = await res.json();
+      const services: any[] = ((this.settings as any).ipServices || []).filter((s: any) => s.enabled);
+      if (services.length === 0) throw 'No IP services enabled';
 
-      const countryCode: string = raw.country || '';
+      let geoData: { ip: string; country: string; timezone: string } | null = null;
+
+      for (const svc of services) {
+        try {
+          const fields = IP_TEMPLATES[svc.template || 'custom'] || IP_TEMPLATES['custom'];
+          const ipField = svc.template === 'custom' ? svc.ipField || 'ip' : fields.ip;
+          const countryField = svc.template === 'custom' ? svc.countryField || 'country' : fields.country;
+          const tzField = svc.template === 'custom' ? svc.tzField || 'timezone' : fields.tz;
+          const svcRes = await fetch(svc.url || '');
+          const svcRaw = await svcRes.json();
+          const ip = this.getField(svcRaw, ipField);
+          const country = this.getField(svcRaw, countryField);
+          const timezone = this.getField(svcRaw, tzField);
+          if (country && timezone) {
+            geoData = { ip, country, timezone };
+            break;
+          }
+        } catch (_) {
+          continue;
+        }
+      }
+
+      if (!geoData) throw 'All IP services failed';
+
+      const countryCode: string = geoData.country;
       let data: any = {
-        ip: raw.ip || '',
-        timezone: raw.timezone || '',
+        ip: geoData.ip,
+        timezone: geoData.timezone,
         languages: countryCode || 'x',
       };
       this.tempStore.ipInfo.cache = data;
