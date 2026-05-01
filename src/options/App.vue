@@ -6,7 +6,7 @@
         <div @click="changeTab('about')" class="options-tab" :class="activeTab('about')" v-t="'options-tab-about.message'"></div>
         <div @click="changeTab('whitelist')" class="options-tab" :class="activeTab('whitelist')" v-t="'text-whitelist.message'"></div>
         <div @click="changeTab('iprules')" class="options-tab" :class="activeTab('iprules')" v-t="'options-tab-ipRules.message'"></div>
-        <div @click="changeTab('ipservices')" class="options-tab" :class="activeTab('ipservices')">IP Services</div>
+        <div @click="changeTab('ipservices')" class="options-tab" :class="activeTab('ipservices')">Геолокация по IP</div>
       </div>
     </div>
     <div class="flex-grow px-4 pt-12 z-0">
@@ -160,43 +160,45 @@
       </div>
       <div v-show="currentTab === 'ipservices'" class="text-2xl flex flex-col">
         <p class="mb-4 text-sm">
-          URL: используй <code>{KEY}</code> как плейсхолдер для API ключа.<br />
-          Поля ответа: dot-notation путь к значению в JSON (например <code>time_zone.name</code>).
+          Сервисы определения страны, часового пояса и языка по IP-адресу.<br />
+          Включите один или несколько. Если первый недоступен — используется следующий.
         </p>
-        <div v-for="(svc, index) in ipServices" :key="index" class="border rounded p-3 mb-3">
-          <div class="flex items-center gap-x-2 mb-2">
-            <input type="checkbox" v-model="svc.enabled" @change="saveIPServices()" />
-            <select v-model="svc.template" @change="saveIPServices()" class="form-input">
-              <option value="ipinfo">ipinfo.io</option>
-              <option value="ipdata">ipdata.co</option>
-              <option value="abstractapi">abstractapi.com</option>
-              <option value="custom">Custom</option>
-            </select>
-            <div class="ml-auto flex gap-x-1">
-              <button @click="moveIPService(index, -1)" :disabled="index === 0" class="px-1">
-                <feather type="arrow-up" size="1em"></feather>
-              </button>
-              <button @click="moveIPService(index, 1)" :disabled="index === ipServices.length - 1" class="px-1">
-                <feather type="arrow-down" size="1em"></feather>
-              </button>
-              <button @click="removeIPService(index)" class="px-1">
-                <feather type="trash-2" size="1em"></feather>
-              </button>
-            </div>
-          </div>
-          <input v-model="svc.url" @input="saveIPServices()" placeholder="Full URL with API key" class="form-input w-full mb-1" />
-          <div v-if="svc.template === 'custom'" class="flex gap-x-2 mt-1">
-            <input v-model="svc.ipField" @input="saveIPServices()" placeholder="IP field (e.g. ip)" class="form-input flex-1" />
-            <input v-model="svc.countryField" @input="saveIPServices()" placeholder="Country field (e.g. country)" class="form-input flex-1" />
-            <input v-model="svc.tzField" @input="saveIPServices()" placeholder="Timezone field (e.g. timezone)" class="form-input flex-1" />
+
+        <!-- От оригинального аддона -->
+        <div class="border rounded p-3 mb-3">
+          <div class="flex items-center gap-x-2">
+            <input type="checkbox" :checked="fixedServices.default.enabled" @change="toggleFixedService('default', $event)" />
+            <span class="font-medium">От оригинального аддона</span>
+            <span class="text-sm text-gray-500 ml-2">(geoip-lookup.vercel.app — API ключ не нужен)</span>
           </div>
         </div>
-        <button @click="addIPService()" class="transparent-btn">
-          <div class="flex items-center">
-            <feather class="mr-2" type="plus" size="1em"></feather>
-            <span>Add service</span>
+
+        <!-- ipdata.co -->
+        <div class="border rounded p-3 mb-3">
+          <div class="flex items-center gap-x-2 mb-2">
+            <input type="checkbox" :checked="fixedServices.ipdata.enabled" @change="toggleFixedService('ipdata', $event)" />
+            <span class="font-medium">ipdata.co</span>
           </div>
-        </button>
+          <input :value="fixedServices.ipdata.apiKey" @input="updateFixedServiceKey('ipdata', $event)" placeholder="API ключ" class="form-input w-full" />
+        </div>
+
+        <!-- abstractapi.com -->
+        <div class="border rounded p-3 mb-3">
+          <div class="flex items-center gap-x-2 mb-2">
+            <input type="checkbox" :checked="fixedServices.abstractapi.enabled" @change="toggleFixedService('abstractapi', $event)" />
+            <span class="font-medium">abstractapi.com</span>
+          </div>
+          <input :value="fixedServices.abstractapi.apiKey" @input="updateFixedServiceKey('abstractapi', $event)" placeholder="API ключ" class="form-input w-full" />
+        </div>
+
+        <!-- ipinfo.io -->
+        <div class="border rounded p-3 mb-3">
+          <div class="flex items-center gap-x-2 mb-2">
+            <input type="checkbox" :checked="fixedServices.ipinfo.enabled" @change="toggleFixedService('ipinfo', $event)" />
+            <span class="font-medium">ipinfo.io</span>
+          </div>
+          <input :value="fixedServices.ipinfo.apiKey" @input="updateFixedServiceKey('ipinfo', $event)" placeholder="API ключ" class="form-input w-full" />
+        </div>
       </div>
       <div v-show="currentTab === 'iprules'" class="text-2xl flex flex-col">
         <div class="flex flex-col md:flex-row">
@@ -586,6 +588,24 @@ export default class App extends Vue {
     return (this.settings as any).ipServices || [];
   }
 
+  get fixedServices(): any {
+    const defaults = {
+      default: { enabled: true },
+      ipdata: { enabled: false, apiKey: '' },
+      abstractapi: { enabled: false, apiKey: '' },
+      ipinfo: { enabled: false, apiKey: '' },
+    };
+    const stored = (this.settings as any).fixedServices;
+    if (!stored) return defaults;
+    // Мерджим defaults с сохранёнными данными, чтобы не потерять новые ключи
+    return {
+      default: { ...defaults.default, ...stored.default },
+      ipdata: { ...defaults.ipdata, ...stored.ipdata },
+      abstractapi: { ...defaults.abstractapi, ...stored.abstractapi },
+      ipinfo: { ...defaults.ipinfo, ...stored.ipinfo },
+    };
+  }
+
   activeTab(tab: string): string[] {
     return this.currentTab === tab ? ['active'] : ['hover:bg-primary-soft'];
   }
@@ -913,6 +933,27 @@ export default class App extends Vue {
     browser.runtime.sendMessage({
       action: 'save',
       data: { ipServices: (this.settings as any).ipServices },
+    });
+  }
+
+  toggleFixedService(name: string, evt: any): void {
+    const fs = { ...this.fixedServices };
+    fs[name] = { ...fs[name], enabled: evt.target.checked };
+    (this.settings as any).fixedServices = fs;
+    this.saveFixedServices();
+  }
+
+  updateFixedServiceKey(name: string, evt: any): void {
+    const fs = { ...this.fixedServices };
+    fs[name] = { ...fs[name], apiKey: evt.target.value };
+    (this.settings as any).fixedServices = fs;
+    this.saveFixedServices();
+  }
+
+  saveFixedServices(): void {
+    browser.runtime.sendMessage({
+      action: 'save',
+      data: { fixedServices: (this.settings as any).fixedServices },
     });
   }
 

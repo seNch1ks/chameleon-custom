@@ -961,22 +961,53 @@ export class Chameleon {
     try {
       let notificationMsg: string;
 
-      const services: any[] = ((this.settings as any).ipServices || []).filter((s: any) => s.enabled);
-      if (services.length === 0) throw 'No IP services enabled';
+      const fs = (this.settings as any).fixedServices || {
+        default: { enabled: true },
+        ipdata: { enabled: false, apiKey: '' },
+        abstractapi: { enabled: false, apiKey: '' },
+        ipinfo: { enabled: false, apiKey: '' },
+      };
+
+      interface ServiceDef {
+        url: string;
+        template: string;
+      }
+      const queue: ServiceDef[] = [];
+
+      if (fs.default && fs.default.enabled) {
+        queue.push({ url: 'https://geoip-lookup.vercel.app/api/geoip', template: 'default' });
+      }
+      if (fs.ipdata && fs.ipdata.enabled && fs.ipdata.apiKey) {
+        queue.push({ url: `https://api.ipdata.co/?api-key=${fs.ipdata.apiKey}`, template: 'ipdata' });
+      }
+      if (fs.abstractapi && fs.abstractapi.enabled && fs.abstractapi.apiKey) {
+        queue.push({ url: `https://ipgeolocation.abstractapi.com/v1/?api_key=${fs.abstractapi.apiKey}`, template: 'abstractapi' });
+      }
+      if (fs.ipinfo && fs.ipinfo.enabled && fs.ipinfo.apiKey) {
+        queue.push({ url: `https://ipinfo.io/json?token=${fs.ipinfo.apiKey}`, template: 'ipinfo' });
+      }
+
+      if (queue.length === 0) throw 'No IP services enabled';
 
       let geoData: { ip: string; country: string; timezone: string } | null = null;
 
-      for (const svc of services) {
+      for (const svc of queue) {
         try {
-          const fields = IP_TEMPLATES[svc.template || 'custom'] || IP_TEMPLATES['custom'];
-          const ipField = svc.template === 'custom' ? svc.ipField || 'ip' : fields.ip;
-          const countryField = svc.template === 'custom' ? svc.countryField || 'country' : fields.country;
-          const tzField = svc.template === 'custom' ? svc.tzField || 'timezone' : fields.tz;
-          const svcRes = await fetch(svc.url || '');
+          const svcRes = await fetch(svc.url);
           const svcRaw = await svcRes.json();
-          const ip = this.getField(svcRaw, ipField);
-          const country = this.getField(svcRaw, countryField);
-          const timezone = this.getField(svcRaw, tzField);
+          let ip: string, country: string, timezone: string;
+
+          if (svc.template === 'default') {
+            ip = this.getField(svcRaw, 'ip');
+            country = this.getField(svcRaw, 'country');
+            timezone = this.getField(svcRaw, 'timezone');
+          } else {
+            const fields = IP_TEMPLATES[svc.template];
+            ip = this.getField(svcRaw, fields.ip);
+            country = this.getField(svcRaw, fields.country);
+            timezone = this.getField(svcRaw, fields.tz);
+          }
+
           if (country && timezone) {
             geoData = { ip, country, timezone };
             break;
