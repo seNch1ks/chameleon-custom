@@ -1292,10 +1292,19 @@ export default class App extends Vue {
   async toggleChameleon() {
     await this['$store'].dispatch('toggleChameleon', !this.settings.config.enabled);
     webext.sendToBackground(this.settings);
-
     browser.runtime.sendMessage({
       action: 'reloadInjectionScript',
     });
+    // Останавливаем/возобновляем таймер при переключении Chameleon
+    if ((this.settings as any).config.ipAutoRefresh) {
+      browser.runtime.sendMessage({
+        action: 'setIPAutoRefresh',
+        data: {
+          enabled: this.settings.config.enabled,
+          interval: (this.settings as any).config.ipAutoRefreshInterval,
+        },
+      });
+    }
   }
 
   async toggleNotifications() {

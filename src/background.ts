@@ -8,16 +8,6 @@ store.state.version = browser.runtime.getManifest().version;
 
 let chameleon = new Chameleon(JSON.parse(JSON.stringify(store.state)));
 let ipAutoRefreshTimer: any = null;
-(async () => {
-  const cfg = (chameleon.settings as any).config;
-  if (cfg && cfg.ipAutoRefresh && cfg.ipAutoRefreshInterval >= 10) {
-    ipAutoRefreshTimer = setInterval(() => {
-      if (chameleon.settings.options.timeZone === 'ip' || (chameleon.settings.headers.spoofAcceptLang.value === 'ip' && chameleon.settings.headers.spoofAcceptLang.enabled)) {
-        chameleon.updateIPInfo();
-      }
-    }, cfg.ipAutoRefreshInterval * 1000);
-  }
-})();
 let messageHandler = (request: any, sender: any, sendResponse: any) => {
   if (request.action === 'save') {
     if (chameleon.timeout) {
@@ -87,6 +77,22 @@ let messageHandler = (request: any, sender: any, sendResponse: any) => {
   } else if (request.action === 'reloadIPInfo') {
     if (chameleon.settings.options.timeZone === 'ip' || (chameleon.settings.headers.spoofAcceptLang.value === 'ip' && chameleon.settings.headers.spoofAcceptLang.enabled)) {
       chameleon.updateIPInfo();
+      // Сбрасываем таймер
+      if (ipAutoRefreshTimer) {
+        clearInterval(ipAutoRefreshTimer);
+        ipAutoRefreshTimer = null;
+      }
+      const cfg = (chameleon.settings as any).config;
+      if (cfg && cfg.ipAutoRefresh && cfg.ipAutoRefreshInterval >= 10) {
+        ipAutoRefreshTimer = setInterval(() => {
+          if (
+            chameleon.settings.config.enabled &&
+            (chameleon.settings.options.timeZone === 'ip' || (chameleon.settings.headers.spoofAcceptLang.value === 'ip' && chameleon.settings.headers.spoofAcceptLang.enabled))
+          ) {
+            chameleon.updateIPInfo();
+          }
+        }, cfg.ipAutoRefreshInterval * 1000);
+      }
       sendResponse('done');
     }
   } else if (request.action === 'setIPAutoRefresh') {
@@ -133,6 +139,19 @@ let messageHandler = (request: any, sender: any, sendResponse: any) => {
 
     // reset interval timer and send notification
     chameleon.setTimer();
+
+    // Восстанавливаем таймер автообновления IP
+    const cfg = (chameleon.settings as any).config;
+    if (cfg && cfg.ipAutoRefresh && cfg.ipAutoRefreshInterval >= 10) {
+      ipAutoRefreshTimer = setInterval(() => {
+        if (
+          chameleon.settings.config.enabled &&
+          (chameleon.settings.options.timeZone === 'ip' || (chameleon.settings.headers.spoofAcceptLang.value === 'ip' && chameleon.settings.headers.spoofAcceptLang.enabled))
+        ) {
+          chameleon.updateIPInfo();
+        }
+      }, cfg.ipAutoRefreshInterval * 1000);
+    }
     sendResponse('done');
   } else if (request.action === 'updateWhitelist') {
     chameleon.settings.whitelist = request.data;

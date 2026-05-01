@@ -633,17 +633,6 @@ export default class App extends Vue {
 
     await this['$store'].dispatch('initialize');
 
-    // Инициализируем fixedServices в хранилище если их там ещё нет
-    if (!(this.settings as any).fixedServices) {
-      (this.settings as any).fixedServices = {
-        default: { enabled: true },
-        ipdata: { enabled: false, apiKey: '' },
-        abstractapi: { enabled: false, apiKey: '' },
-        ipinfo: { enabled: false, apiKey: '' },
-      };
-      this.saveFixedServices();
-    }
-
     let hash = window.location.hash.split('?');
     let queryParams = hash.length > 1 ? hash[1] : '';
 
