@@ -10,7 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 const IP_TEMPLATES: Record<string, { ip: string; country: string; tz: string }> = {
   ipinfo: { ip: 'ip', country: 'country', tz: 'timezone' },
   ipdata: { ip: 'ip', country: 'country_code', tz: 'time_zone.name' },
-  abstractapi: { ip: 'ip_address', country: 'country_code', tz: 'timezone.name' },
+  abstractapi: { ip: 'ip_address', country: 'location.country_code', tz: 'timezone.name' },
   custom: { ip: '', country: '', tz: '' },
 };
 
@@ -981,7 +981,7 @@ export class Chameleon {
         queue.push({ url: `https://api.ipdata.co/?api-key=${fs.ipdata.apiKey}`, template: 'ipdata' });
       }
       if (fs.abstractapi && fs.abstractapi.enabled && fs.abstractapi.apiKey) {
-        queue.push({ url: `https://ipgeolocation.abstractapi.com/v1/?api_key=${fs.abstractapi.apiKey}`, template: 'abstractapi' });
+        queue.push({ url: `https://ip-intelligence.abstractapi.com/v1/?api_key=${fs.abstractapi.apiKey}`, template: 'abstractapi' });
       }
       if (fs.ipinfo && fs.ipinfo.enabled && fs.ipinfo.apiKey) {
         queue.push({ url: `https://ipinfo.io/json?token=${fs.ipinfo.apiKey}`, template: 'ipinfo' });
@@ -995,21 +995,23 @@ export class Chameleon {
         try {
           const svcRes = await fetch(svc.url);
           const svcRaw = await svcRes.json();
-          let ip: string, country: string, timezone: string;
+          let ip: string, languages: string, timezone: string;
 
           if (svc.template === 'default') {
+            // geoip-lookup возвращает: { ip, timezone, languages } — поля country нет
             ip = this.getField(svcRaw, 'ip');
-            country = this.getField(svcRaw, 'country');
             timezone = this.getField(svcRaw, 'timezone');
+            languages = this.getField(svcRaw, 'languages');
           } else {
             const fields = IP_TEMPLATES[svc.template];
             ip = this.getField(svcRaw, fields.ip);
-            country = this.getField(svcRaw, fields.country);
+            // сторонние сервисы возвращают country_code, конвертируем в язык позже
+            languages = this.getField(svcRaw, fields.country);
             timezone = this.getField(svcRaw, fields.tz);
           }
 
-          if (country && timezone) {
-            geoData = { ip, country, timezone };
+          if (timezone && (languages || ip)) {
+            geoData = { ip, country: languages, timezone };
             break;
           }
         } catch (_) {
@@ -1023,7 +1025,7 @@ export class Chameleon {
       let data: any = {
         ip: geoData.ip,
         timezone: geoData.timezone,
-        languages: countryCode || 'x',
+        languages: geoData.country || 'x',
       };
       this.tempStore.ipInfo.cache = data;
 
