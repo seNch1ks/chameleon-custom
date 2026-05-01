@@ -1117,7 +1117,6 @@ export class Chameleon {
           }
         }
 
-        if (countryCode) this.tempStore.ipInfo.lang = this.getLanguageByCountry(countryCode);
         browser.runtime.sendMessage(
           {
             action: 'tempStore',
