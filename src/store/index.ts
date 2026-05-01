@@ -13,6 +13,8 @@ export default new Vuex.Store({
       notificationsEnabled: false,
       theme: 'light',
       reloadIPStartupDelay: 0,
+      ipAutoRefresh: false,
+      ipAutoRefreshInterval: 120,
     },
     excluded: [],
     headers: {

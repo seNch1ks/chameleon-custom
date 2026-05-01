@@ -67,12 +67,25 @@
                 </div>
               </div>
             </div>
-            <div v-show="canReloadIP" class="flex justify-center text-sm">
+            <div v-show="canReloadIP" class="flex flex-col items-center gap-y-1 text-sm">
               <div id="reloadIPInfo" @click="reloadIPInfo" class="rounded-lg cursor-pointer fg">
                 <div class="flex items-center px-2 py-1">
                   <feather class="mr-2" type="refresh-cw" size="1em"></feather>
                   <span v-t="'options-ipRules-reload.message'"></span>
                 </div>
+              </div>
+              <div class="flex items-center gap-x-2 px-2">
+                <input type="checkbox" :checked="settings.config.ipAutoRefresh" @change="toggleIPAutoRefresh($event)" />
+                <span>Автообновление</span>
+                <input
+                  type="number"
+                  min="10"
+                  :value="settings.config.ipAutoRefreshInterval"
+                  @change="setIPAutoRefreshInterval($event)"
+                  class="form-input text-sm"
+                  style="width: 6em;"
+                />
+                <span>s</span>
               </div>
             </div>
           </div>
@@ -1143,7 +1156,38 @@ export default class App extends Vue {
   reloadIPInfo(): void {
     browser.runtime.sendMessage({
       action: 'reloadIPInfo',
+      data: { fixedServices: (this.settings as any).fixedServices },
     });
+  }
+
+  toggleIPAutoRefresh(evt: any): void {
+    (this.settings as any).config.ipAutoRefresh = evt.target.checked;
+    browser.runtime.sendMessage({
+      action: 'save',
+      data: { config: (this.settings as any).config },
+    });
+    browser.runtime.sendMessage({
+      action: 'setIPAutoRefresh',
+      data: {
+        enabled: evt.target.checked,
+        interval: (this.settings as any).config.ipAutoRefreshInterval,
+      },
+    });
+  }
+
+  setIPAutoRefreshInterval(evt: any): void {
+    const val = Math.max(10, parseInt(evt.target.value) || 60);
+    (this.settings as any).config.ipAutoRefreshInterval = val;
+    browser.runtime.sendMessage({
+      action: 'save',
+      data: { config: (this.settings as any).config },
+    });
+    if ((this.settings as any).config.ipAutoRefresh) {
+      browser.runtime.sendMessage({
+        action: 'setIPAutoRefresh',
+        data: { enabled: true, interval: val },
+      });
+    }
   }
 
   resizeProfileList(): void {

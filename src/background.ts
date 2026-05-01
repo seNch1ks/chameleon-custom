@@ -7,6 +7,17 @@ webext.firstTimeInstall();
 store.state.version = browser.runtime.getManifest().version;
 
 let chameleon = new Chameleon(JSON.parse(JSON.stringify(store.state)));
+let ipAutoRefreshTimer: any = null;
+(async () => {
+  const cfg = (chameleon.settings as any).config;
+  if (cfg && cfg.ipAutoRefresh && cfg.ipAutoRefreshInterval >= 10) {
+    ipAutoRefreshTimer = setInterval(() => {
+      if (chameleon.settings.options.timeZone === 'ip' || (chameleon.settings.headers.spoofAcceptLang.value === 'ip' && chameleon.settings.headers.spoofAcceptLang.enabled)) {
+        chameleon.updateIPInfo();
+      }
+    }, cfg.ipAutoRefreshInterval * 1000);
+  }
+})();
 let messageHandler = (request: any, sender: any, sendResponse: any) => {
   if (request.action === 'save') {
     if (chameleon.timeout) {
@@ -78,6 +89,19 @@ let messageHandler = (request: any, sender: any, sendResponse: any) => {
       chameleon.updateIPInfo();
       sendResponse('done');
     }
+  } else if (request.action === 'setIPAutoRefresh') {
+    if (ipAutoRefreshTimer) {
+      clearInterval(ipAutoRefreshTimer);
+      ipAutoRefreshTimer = null;
+    }
+    if (request.data.enabled && request.data.interval >= 10) {
+      ipAutoRefreshTimer = setInterval(() => {
+        if (chameleon.settings.options.timeZone === 'ip' || (chameleon.settings.headers.spoofAcceptLang.value === 'ip' && chameleon.settings.headers.spoofAcceptLang.enabled)) {
+          chameleon.updateIPInfo();
+        }
+      }, request.data.interval * 1000);
+    }
+    sendResponse('done');
   } else if (request.action === 'reloadProfile') {
     chameleon.setTimer(request.data);
     chameleon.buildInjectionScript();
