@@ -87,6 +87,12 @@
                 />
                 <span>s</span>
               </div>
+              <div class="flex items-center gap-x-2 px-2 mt-1">
+                <span>API</span>
+                <select @change="setPrimaryService($event)" class="form-input text-sm" style="width: auto;">
+                  <option v-for="svcName in serviceOrder" :key="svcName" :value="svcName" :selected="svcName === primaryService">{{ serviceLabel(svcName) }}</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -941,6 +947,25 @@ export default class App extends Vue {
     return false;
   }
 
+  get serviceOrder(): string[] {
+    const fs = (this.settings as any).fixedServices;
+    return fs && fs.serviceOrder ? fs.serviceOrder : ['default', 'ipdata', 'abstractapi', 'ipinfo'];
+  }
+
+  get primaryService(): string {
+    return this.serviceOrder[0];
+  }
+
+  serviceLabel(name: string): string {
+    const labels: Record<string, string> = {
+      default: 'От оригинального аддона',
+      ipdata: 'ipdata.co',
+      abstractapi: 'abstractapi.com',
+      ipinfo: 'ipinfo.io',
+    };
+    return labels[name] || name;
+  }
+
   get isRandomProfile(): boolean {
     if (this.settings.profile.selected.includes('random') || ['windows', 'macOS', 'linux', 'iOS', 'android'].includes(this.settings.profile.selected)) {
       return true;
@@ -1188,6 +1213,40 @@ export default class App extends Vue {
         data: { enabled: true, interval: val },
       });
     }
+  }
+
+  setPrimaryService(evt: any): void {
+    const selected = evt.target.value;
+    const fs = JSON.parse(JSON.stringify((this.settings as any).fixedServices || {}));
+    const order = [...(fs.serviceOrder || ['default', 'ipdata', 'abstractapi', 'ipinfo'])];
+
+    // Снимаем старую временную галочку
+    if (fs.tempPrimary && fs[fs.tempPrimary]) {
+      fs[fs.tempPrimary] = { ...fs[fs.tempPrimary], enabled: false };
+    }
+
+    // Переставляем selected на первое место
+    const currentIdx = order.indexOf(selected);
+    if (currentIdx > 0) {
+      order.splice(currentIdx, 1);
+      order.unshift(selected);
+    }
+    fs.serviceOrder = order;
+
+    // Временно активируем если не была включена
+    const wasEnabled = fs[selected] && fs[selected].enabled;
+    if (!wasEnabled) {
+      fs[selected] = { ...fs[selected], enabled: true };
+      fs.tempPrimary = selected;
+    } else {
+      fs.tempPrimary = null;
+    }
+
+    (this.settings as any).fixedServices = fs;
+    browser.runtime.sendMessage({
+      action: 'save',
+      data: { fixedServices: fs },
+    });
   }
 
   resizeProfileList(): void {

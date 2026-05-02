@@ -164,40 +164,44 @@
           Включите один или несколько. Если первый недоступен — используется следующий.
         </p>
 
-        <!-- От оригинального аддона -->
-        <div class="border rounded p-3 mb-3">
-          <div class="flex items-center gap-x-2">
-            <input type="checkbox" :checked="fixedServices.default.enabled" @change="toggleFixedService('default', $event)" />
-            <span class="font-medium">От оригинального аддона</span>
-            <span class="text-sm text-gray-500 ml-2">(geoip-lookup.vercel.app — API ключ не нужен)</span>
-          </div>
-        </div>
-
-        <!-- ipdata.co -->
-        <div class="border rounded p-3 mb-3">
+        <div v-for="(svcName, idx) in fixedServices.serviceOrder" :key="svcName" class="border rounded p-3 mb-3">
           <div class="flex items-center gap-x-2 mb-2">
-            <input type="checkbox" :checked="fixedServices.ipdata.enabled" @change="toggleFixedService('ipdata', $event)" />
-            <span class="font-medium">ipdata.co</span>
+            <!-- Стрелки -->
+            <div class="flex flex-col mr-1">
+              <button @click="moveService(idx, -1)" :disabled="idx === 0" class="text-xs leading-none px-1" style="opacity: 0.5;" :style="idx === 0 ? 'visibility:hidden' : ''">
+                ▲
+              </button>
+              <button
+                @click="moveService(idx, 1)"
+                :disabled="idx === fixedServices.serviceOrder.length - 1"
+                class="text-xs leading-none px-1"
+                style="opacity: 0.5;"
+                :style="idx === fixedServices.serviceOrder.length - 1 ? 'visibility:hidden' : ''"
+              >
+                ▼
+              </button>
+            </div>
+            <!-- Чекбокс -->
+            <input
+              type="checkbox"
+              :checked="fixedServices[svcName].enabled"
+              :style="fixedServices.tempPrimary === svcName ? (idx === 0 ? 'accent-color: green;' : 'accent-color: purple;') : ''"
+              @change="toggleFixedService(svcName, $event)"
+            />
+            <!-- Название -->
+            <span class="font-medium">{{ serviceLabel(svcName) }}</span>
+            <span v-if="svcName === 'default'" class="text-sm text-gray-500 ml-2">(geoip-lookup.vercel.app — API ключ не нужен)</span>
+            <!-- Бейдж "первый" -->
+            <span v-if="idx === 0" class="text-xs ml-auto text-primary">● первый</span>
           </div>
-          <input :value="fixedServices.ipdata.apiKey" @input="updateFixedServiceKey('ipdata', $event)" placeholder="API ключ" class="form-input w-full" />
-        </div>
-
-        <!-- abstractapi.com -->
-        <div class="border rounded p-3 mb-3">
-          <div class="flex items-center gap-x-2 mb-2">
-            <input type="checkbox" :checked="fixedServices.abstractapi.enabled" @change="toggleFixedService('abstractapi', $event)" />
-            <span class="font-medium">abstractapi.com</span>
-          </div>
-          <input :value="fixedServices.abstractapi.apiKey" @input="updateFixedServiceKey('abstractapi', $event)" placeholder="API ключ" class="form-input w-full" />
-        </div>
-
-        <!-- ipinfo.io -->
-        <div class="border rounded p-3 mb-3">
-          <div class="flex items-center gap-x-2 mb-2">
-            <input type="checkbox" :checked="fixedServices.ipinfo.enabled" @change="toggleFixedService('ipinfo', $event)" />
-            <span class="font-medium">ipinfo.io</span>
-          </div>
-          <input :value="fixedServices.ipinfo.apiKey" @input="updateFixedServiceKey('ipinfo', $event)" placeholder="API ключ" class="form-input w-full" />
+          <!-- Поле API ключа (для всех кроме default) -->
+          <input
+            v-if="svcName !== 'default'"
+            :value="fixedServices[svcName].apiKey"
+            @input="updateFixedServiceKey(svcName, $event)"
+            placeholder="API ключ"
+            class="form-input w-full"
+          />
         </div>
       </div>
       <div v-show="currentTab === 'iprules'" class="text-2xl flex flex-col">
@@ -594,15 +598,18 @@ export default class App extends Vue {
       ipdata: { enabled: false, apiKey: '' },
       abstractapi: { enabled: false, apiKey: '' },
       ipinfo: { enabled: false, apiKey: '' },
+      serviceOrder: ['default', 'ipdata', 'abstractapi', 'ipinfo'],
+      tempPrimary: null,
     };
     const stored = (this.settings as any).fixedServices;
     if (!stored) return defaults;
-    // Мерджим defaults с сохранёнными данными, чтобы не потерять новые ключи
     return {
       default: { ...defaults.default, ...stored.default },
       ipdata: { ...defaults.ipdata, ...stored.ipdata },
       abstractapi: { ...defaults.abstractapi, ...stored.abstractapi },
       ipinfo: { ...defaults.ipinfo, ...stored.ipinfo },
+      serviceOrder: stored.serviceOrder || defaults.serviceOrder,
+      tempPrimary: stored.tempPrimary || null,
     };
   }
 
@@ -939,6 +946,10 @@ export default class App extends Vue {
   toggleFixedService(name: string, evt: any): void {
     const fs = { ...this.fixedServices };
     fs[name] = { ...fs[name], enabled: evt.target.checked };
+    // Если снимаем галочку с tempPrimary — сбрасываем его
+    if (!evt.target.checked && fs.tempPrimary === name) {
+      fs.tempPrimary = null;
+    }
     (this.settings as any).fixedServices = fs;
     this.saveFixedServices();
   }
@@ -955,6 +966,44 @@ export default class App extends Vue {
       action: 'save',
       data: { fixedServices: (this.settings as any).fixedServices },
     });
+  }
+
+  serviceLabel(name: string): string {
+    const labels: Record<string, string> = {
+      default: 'От оригинального аддона',
+      ipdata: 'ipdata.co',
+      abstractapi: 'abstractapi.com',
+      ipinfo: 'ipinfo.io',
+    };
+    return labels[name] || name;
+  }
+
+  moveService(idx: number, dir: number): void {
+    const fs = { ...this.fixedServices };
+    const order = [...fs.serviceOrder];
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= order.length) return;
+
+    // Снимаем старую временную галочку если первый меняется
+    if (fs.tempPrimary && order[0] !== order[newIdx === 0 ? idx : order.indexOf(fs.tempPrimary)]) {
+      if (fs[fs.tempPrimary]) {
+        fs[fs.tempPrimary] = { ...fs[fs.tempPrimary], enabled: false };
+      }
+      fs.tempPrimary = null;
+    }
+
+    [order[idx], order[newIdx]] = [order[newIdx], order[idx]];
+    fs.serviceOrder = order;
+
+    // Если новый первый не имел галочки — временно активируем (зелёная)
+    const newFirst = order[0];
+    if (!fs[newFirst].enabled) {
+      fs[newFirst] = { ...fs[newFirst], enabled: true };
+      fs.tempPrimary = newFirst;
+    }
+
+    (this.settings as any).fixedServices = fs;
+    this.saveFixedServices();
   }
 
   async resetSettings(): Promise<void> {

@@ -972,19 +972,21 @@ export class Chameleon {
         url: string;
         template: string;
       }
+      const SERVICE_URLS: Record<string, (fs: any) => string> = {
+        default: () => 'https://geoip-lookup.vercel.app/api/geoip',
+        ipdata: fs => `https://api.ipdata.co/?api-key=${fs.ipdata.apiKey}`,
+        abstractapi: fs => `https://ip-intelligence.abstractapi.com/v1/?api_key=${fs.abstractapi.apiKey}`,
+        ipinfo: fs => `https://ipinfo.io/json?token=${fs.ipinfo.apiKey}`,
+      };
+
+      const order: string[] = fs.serviceOrder || ['default', 'ipdata', 'abstractapi', 'ipinfo'];
       const queue: ServiceDef[] = [];
 
-      if (fs.default && fs.default.enabled) {
-        queue.push({ url: 'https://geoip-lookup.vercel.app/api/geoip', template: 'default' });
-      }
-      if (fs.ipdata && fs.ipdata.enabled && fs.ipdata.apiKey) {
-        queue.push({ url: `https://api.ipdata.co/?api-key=${fs.ipdata.apiKey}`, template: 'ipdata' });
-      }
-      if (fs.abstractapi && fs.abstractapi.enabled && fs.abstractapi.apiKey) {
-        queue.push({ url: `https://ip-intelligence.abstractapi.com/v1/?api_key=${fs.abstractapi.apiKey}`, template: 'abstractapi' });
-      }
-      if (fs.ipinfo && fs.ipinfo.enabled && fs.ipinfo.apiKey) {
-        queue.push({ url: `https://ipinfo.io/json?token=${fs.ipinfo.apiKey}`, template: 'ipinfo' });
+      for (const svcName of order) {
+        const svc = fs[svcName];
+        if (!svc || !svc.enabled) continue;
+        if (svcName !== 'default' && !svc.apiKey) continue;
+        queue.push({ url: SERVICE_URLS[svcName](fs), template: svcName });
       }
 
       if (queue.length === 0) throw 'No IP services enabled';
