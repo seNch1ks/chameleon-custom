@@ -1224,8 +1224,9 @@ export default class App extends Vue {
     if (fs.tempPrimary && fs[fs.tempPrimary]) {
       fs[fs.tempPrimary] = { ...fs[fs.tempPrimary], enabled: false };
     }
+    fs.tempPrimary = null;
+    fs.tempPrimarySource = null;
 
-    // Переставляем selected на первое место
     const currentIdx = order.indexOf(selected);
     if (currentIdx > 0) {
       order.splice(currentIdx, 1);
@@ -1233,13 +1234,11 @@ export default class App extends Vue {
     }
     fs.serviceOrder = order;
 
-    // Временно активируем если не была включена
     const wasEnabled = fs[selected] && fs[selected].enabled;
     if (!wasEnabled) {
       fs[selected] = { ...fs[selected], enabled: true };
       fs.tempPrimary = selected;
-    } else {
-      fs.tempPrimary = null;
+      fs.tempPrimarySource = 'popup';
     }
 
     (this.settings as any).fixedServices = fs;

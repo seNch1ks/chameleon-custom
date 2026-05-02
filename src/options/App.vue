@@ -185,7 +185,7 @@
             <input
               type="checkbox"
               :checked="fixedServices[svcName].enabled"
-              :style="fixedServices.tempPrimary === svcName ? (idx === 0 ? 'accent-color: green;' : 'accent-color: purple;') : ''"
+              :style="fixedServices.tempPrimary === svcName ? (fixedServices.tempPrimarySource === 'gui' ? 'accent-color: green;' : 'accent-color: purple;') : ''"
               @change="toggleFixedService(svcName, $event)"
             />
             <!-- Название -->
@@ -600,6 +600,7 @@ export default class App extends Vue {
       ipinfo: { enabled: false, apiKey: '' },
       serviceOrder: ['default', 'ipdata', 'abstractapi', 'ipinfo'],
       tempPrimary: null,
+      tempPrimarySource: null,
     };
     const stored = (this.settings as any).fixedServices;
     if (!stored) return defaults;
@@ -610,6 +611,7 @@ export default class App extends Vue {
       ipinfo: { ...defaults.ipinfo, ...stored.ipinfo },
       serviceOrder: stored.serviceOrder || defaults.serviceOrder,
       tempPrimary: stored.tempPrimary || null,
+      tempPrimarySource: stored.tempPrimarySource || null,
     };
   }
 
@@ -945,10 +947,14 @@ export default class App extends Vue {
 
   toggleFixedService(name: string, evt: any): void {
     const fs = { ...this.fixedServices };
+    if (!evt.target.checked && fs.serviceOrder[0] === name) {
+      (evt.target as HTMLInputElement).checked = true;
+      return;
+    }
     fs[name] = { ...fs[name], enabled: evt.target.checked };
-    // Если снимаем галочку с tempPrimary — сбрасываем его
     if (!evt.target.checked && fs.tempPrimary === name) {
       fs.tempPrimary = null;
+      fs.tempPrimarySource = null;
     }
     (this.settings as any).fixedServices = fs;
     this.saveFixedServices();
@@ -984,22 +990,30 @@ export default class App extends Vue {
     const newIdx = idx + dir;
     if (newIdx < 0 || newIdx >= order.length) return;
 
+    // П.3 — запрет перемещения первого вниз если второй без галки
+    if (idx === 0 && dir === 1) {
+      const secondName = order[1];
+      if (!fs[secondName] || !fs[secondName].enabled) return;
+    }
+
     // Снимаем старую временную галочку если первый меняется
-    if (fs.tempPrimary && order[0] !== order[newIdx === 0 ? idx : order.indexOf(fs.tempPrimary)]) {
+    if (fs.tempPrimary && (idx === 0 || newIdx === 0)) {
       if (fs[fs.tempPrimary]) {
         fs[fs.tempPrimary] = { ...fs[fs.tempPrimary], enabled: false };
       }
       fs.tempPrimary = null;
+      fs.tempPrimarySource = null;
     }
 
     [order[idx], order[newIdx]] = [order[newIdx], order[idx]];
     fs.serviceOrder = order;
 
-    // Если новый первый не имел галочки — временно активируем (зелёная)
+    // Если новый первый не имел галочки — временно активируем (зелёная, gui)
     const newFirst = order[0];
     if (!fs[newFirst].enabled) {
       fs[newFirst] = { ...fs[newFirst], enabled: true };
       fs.tempPrimary = newFirst;
+      fs.tempPrimarySource = 'gui';
     }
 
     (this.settings as any).fixedServices = fs;
